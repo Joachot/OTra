@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat con Ollama</title>
+  <style>
+    #chatBox {
+      height: 300px;
+      width: 100%;
+      overflow-y: scroll;
+      border: 1px solid #ddd;
+      padding: 10px;
+    }
+    #inputBox {
+      width: 100%;
+      padding: 10px;
+    }
+    #status {
+      color: red;
+    }
+    #users {
+      margin-top: 20px;
+    }
+    #userInfo {
+      margin-bottom: 10px;
+      font-size: 16px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Chat con Ollama</h1>
+  <div id="userInfo">Eres el usuario: <span id="userIdPlaceholder">Cargando...</span></div> <!-- Mostrar el número de usuario -->
+  <div id="chatBox"></div>
+  <div id="status">Ollama está procesando tu mensaje...</div>
+  <input type="text" id="inputBox" placeholder="Escribe tu mensaje..." disabled>
+  <button onclick="sendMessage()">Enviar</button>
+
+  <h2>Usuarios conectados</h2>
+  <div id="userList"></div> <!-- Div para mostrar los usuarios conectados -->
+
+  <script>
+    const socket = new WebSocket('ws://localhost:3000'); // Conexión WebSocket
+    let userId = ''; // Almacenar el ID del usuario
+
+    socket.onopen = function() {
+      console.log('Conectado al servidor WebSocket');
+    };
+
+    socket.onmessage = function(event) {
+      const message = JSON.parse(event.data);
+
+      if (message.type === 'history') {
+        // Mostrar el historial de mensajes al cliente
+        document.getElementById('chatBox').innerHTML = message.data.map(msg => `${msg.user}: ${msg.message}`).join('<br>');
+      }
+
+      if (message.type === 'message') {
+        // Mostrar nuevos mensajes en el chat
+        document.getElementById('chatBox').innerHTML += `<br>${message.user}: ${message.message}`;
+      }
+
+      if (message.type === 'response') {
+        // Mostrar la respuesta en tiempo real de Ollama sin saltos de línea adicionales
+        const chatBox = document.getElementById('chatBox');
+
+        // Limpiar solo la última respuesta de Ollama (de ser necesario)
+        const lastMessage = chatBox.lastChild;
+        if (lastMessage && lastMessage.textContent.startsWith('Ollama:')) {
+          lastMessage.textContent = `Ollama: ${message.message}`; // Reemplazar la respuesta anterior
+        } else {
+          chatBox.innerHTML += `<br>Ollama: ${message.message}`;
+        }
+      }
+
+      if (message.type === 'status') {
+        // Actualizar el estado de procesamiento con la animación de puntos
+        if (message.data) {
+          document.getElementById('status').innerHTML = 'Ollama está procesando tu mensaje';
+          animateStatus(); // Iniciar la animación de puntos
+          document.getElementById('inputBox').disabled = true;
+        } else {
+          document.getElementById('status').innerHTML = 'Ollama terminó de responder';
+          document.getElementById('inputBox').disabled = false;
+          setTimeout(() => {
+            document.getElementById('status').innerHTML = '';
+          }, 5000);
+        }
+      }
+
+      if (message.type === 'updateUserList') {
+        // Actualizar la lista de usuarios conectados
+        document.getElementById('userList').innerHTML = message.data.join('<br>');
+      }
+
+      if (message.type === 'userId') {
+        // Almacenar el ID del usuario
+        userId = message.data;
+        document.getElementById('userIdPlaceholder').innerText = userId; // Mostrar el ID del usuario
+        console.log('Tu ID de usuario es:', userId);
+      }
+    };
+
+    socket.onerror = function(error) {
+      console.error('Error en WebSocket:', error);
+    };
+
+    socket.onclose = function() {
+      console.log('Conexión WebSocket cerrada');
+    };
+
+    // Función para enviar mensajes
+    function sendMessage() {
+      const message = document.getElementById('inputBox').value;
+      if (message) {
+        socket.send(message);
+        document.getElementById('inputBox').value = '';
+        // Ya no se mostrará el mensaje como "Eres el usuario X: mensaje"
+        // Solo se envía el mensaje sin agregarlo al chat directamente
+      }
+    }
+
+    // Función para animar el estado de Ollama procesando el mensaje
+    let dotCount = 0;
+    function animateStatus() {
+      setInterval(() => {
+        const status = document.getElementById('status');
+        dotCount = (dotCount + 1) % 4; // Cambiar el número de puntos
+        status.innerHTML = `Ollama está procesando tu mensaje${'.'.repeat(dotCount)}`;
+      }, 500); // Cambiar cada 500ms
+    }
+  </script>
+</body>
+</html>
